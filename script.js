@@ -5,7 +5,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const products = document.querySelectorAll(".product");
   const modal = document.getElementById("product-modal");
   const modalDialog = modal ? modal.querySelector(".modal-dialog") : null;
-  const modalCloseButtons = modal ? modal.querySelectorAll(".modal-close") : null;
+  const modalCloseButtons = modal
+    ? modal.querySelectorAll(".modal-close")
+    : null;
   const modalBackdrop = modal ? modal.querySelector(".modal-backdrop") : null;
   const modalTitle = modal ? modal.querySelector(".modal-title") : null;
   const modalLead = modal ? modal.querySelector(".modal-lead") : null;
@@ -15,6 +17,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const carousel = modal ? modal.querySelector("[data-carousel]") : null;
   const carouselTrack = modal ? modal.querySelector("[data-carousel-track]") : null;
   const carouselProgress = modal ? modal.querySelector("[data-carousel-progress]") : null;
+  const carouselPrev = modal ? modal.querySelector("[data-carousel-prev]") : null;
+  const carouselNext = modal ? modal.querySelector("[data-carousel-next]") : null;
 
   const CAROUSEL_INTERVAL = 5000;
   const SWIPE_THRESHOLD = 40;
@@ -124,6 +128,9 @@ document.addEventListener("DOMContentLoaded", () => {
       carouselProgress.style.transition = "none";
       carouselProgress.style.width = "0%";
     }
+    if (carousel) {
+      carousel.classList.remove("is-zoomed");
+    }
   }
 
   function startCarouselProgress() {
@@ -175,6 +182,21 @@ document.addEventListener("DOMContentLoaded", () => {
     startCarouselAuto();
   }
 
+  function goToPrevSlide() {
+    if (!carouselImages.length) return;
+    carouselIndex =
+      (carouselIndex - 1 + carouselImages.length) % carouselImages.length;
+    updateCarousel();
+    startCarouselAuto();
+  }
+
+  function goToNextSlide() {
+    if (!carouselImages.length) return;
+    carouselIndex = (carouselIndex + 1) % carouselImages.length;
+    updateCarousel();
+    startCarouselAuto();
+  }
+
   if (carouselTrack) {
     carouselTrack.addEventListener("pointerdown", (e) => {
       if (!carouselImages.length) return;
@@ -202,18 +224,116 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (Math.abs(delta) > SWIPE_THRESHOLD && carouselImages.length > 1) {
         if (delta < 0) {
-          carouselIndex = (carouselIndex + 1) % carouselImages.length;
+          goToNextSlide();
         } else {
-          carouselIndex =
-            (carouselIndex - 1 + carouselImages.length) % carouselImages.length;
+          goToPrevSlide();
         }
-        updateCarousel();
       }
-      startCarouselAuto();
     };
 
     carouselTrack.addEventListener("pointerup", finishSwipe);
     carouselTrack.addEventListener("pointercancel", finishSwipe);
+  }
+
+  if (carouselPrev) {
+    carouselPrev.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goToPrevSlide();
+    });
+  }
+
+  if (carouselNext) {
+    carouselNext.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goToNextSlide();
+    });
+  }
+
+  if (carousel) {
+    carousel.addEventListener("click", (e) => {
+      const target = e.target;
+      if (
+        target.closest &&
+        target.closest(".carousel-arrow")
+      ) {
+        return;
+      }
+      carousel.classList.toggle("is-zoomed");
+    });
+  }
+
+  function initProductCarousel(root, images) {
+    const track = root.querySelector("[data-product-carousel-track]");
+    const progress = root.querySelector("[data-product-carousel-progress]");
+    const prev = root.querySelector('[data-carousel-control="prev"]');
+    const next = root.querySelector('[data-carousel-control="next"]');
+    if (!track || !images || !images.length) return;
+
+    let index = 0;
+    let timer = null;
+
+    track.innerHTML = "";
+    images.forEach((src) => {
+      const slide = document.createElement("div");
+      slide.className = "product-carousel-slide";
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = "";
+      slide.appendChild(img);
+      track.appendChild(slide);
+    });
+
+    const update = () => {
+      track.style.transform = `translateX(-${index * 100}%)`;
+      if (!progress) return;
+      progress.style.transition = "none";
+      progress.style.width = "0%";
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          progress.style.transition = `width ${CAROUSEL_INTERVAL}ms linear`;
+          progress.style.width = "100%";
+        });
+      });
+    };
+
+    const start = () => {
+      clearInterval(timer);
+      if (images.length === 1) {
+        update();
+        return;
+      }
+      update();
+      timer = setInterval(() => {
+        index = (index + 1) % images.length;
+        update();
+      }, CAROUSEL_INTERVAL);
+    };
+
+    const goPrev = () => {
+      index = (index - 1 + images.length) % images.length;
+      start();
+    };
+
+    const goNext = () => {
+      index = (index + 1) % images.length;
+      start();
+    };
+
+    if (prev) {
+      prev.addEventListener("click", (e) => {
+        e.stopPropagation();
+        goPrev();
+      });
+    }
+
+    if (next) {
+      next.addEventListener("click", (e) => {
+        e.stopPropagation();
+        goNext();
+      });
+    }
+
+    start();
   }
 
   function openProductModal(kind) {
@@ -265,11 +385,21 @@ document.addEventListener("DOMContentLoaded", () => {
     card.style.cursor = "pointer";
     card.addEventListener("click", (e) => {
       const target = e.target;
-      if (target.closest && target.closest("a")) {
+      if (
+        target.closest &&
+        (target.closest("a") || target.closest("[data-carousel-control]"))
+      ) {
         return;
       }
       openProductModal(kind);
     });
+  });
+
+  const productCarousels = document.querySelectorAll("[data-product-carousel]");
+  productCarousels.forEach((root) => {
+    const kind = root.getAttribute("data-product-carousel");
+    if (!kind || !productConfig[kind] || !productConfig[kind].images) return;
+    initProductCarousel(root, productConfig[kind].images);
   });
 
   if (modalCloseButtons) {
